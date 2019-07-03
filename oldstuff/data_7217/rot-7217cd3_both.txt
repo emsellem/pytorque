@@ -1,0 +1,20 @@
+! ROTCUR  version 1.4 (Sep 23 2004)
+! Date               : May 20, 2006
+! Set                : 7217cd_dm 1
+! free angle         :  20.0 (degrees)
+! velocity field     : BOTH HALVES
+! weighting function : COSINE
+! parameters         : VROT
+! 
+!   radius    width systemic  error rotation  error expansion  error    pos.  error incli-  error x-pos.  error y-pos.  error npts   sigma
+!                   velocity        velocity         velocity          angle        nation        centre        centre             velocity
+! (arcsec) (arcsec)   (km/s) (km/s)   (km/s) (km/s)    (km/s) (km/s)  (deg.) (deg.) (deg.) (deg.) (grid) (grid) (grid) (grid)        (km/s)
+      0.1     18.00     0.00   0.00     0.00   0.1       0.00   0.00 
+      9.00    18.00   951.90   0.00   233.76  16.31      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00   38     42.2
+     27.00    18.00   951.90   0.00   261.39   1.89      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00  347     15.9
+     45.00    18.00   951.90   0.00   268.37   0.66      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00  652     7.31
+     63.00    18.00   951.90   0.00   265.41   0.22      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00 1148     3.09
+     81.00    18.00   951.90   0.00   260.75   0.24      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00 1486     3.76
+     99.00    18.00   951.90   0.00   268.04   0.24      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00 1521     3.96
+    117.00    18.00   951.90   0.00   267.00   6.53      0.00   0.00  268.00   0.00  33.70   0.00   0.00   0.00   0.20   0.00  128     32.6
+   
