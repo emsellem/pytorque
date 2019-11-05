@@ -6,6 +6,7 @@ and force torques in the equatorial plane given an input FITS images of a galaxy
 It uses a simple Fourier transform derivation for the potential, with the
 optional fit of a bulge component before the deprojection occurs.
 """
+from __future__ import absolute_import, division, print_function
 
 import sys
 

@@ -67,4 +67,4 @@ except ImportError:
 """
 Import the different submodules
 """
-from pytorque import (pytorque, misc_functions)
+from pytorque import (torque, misc_functions)

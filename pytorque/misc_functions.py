@@ -22,6 +22,7 @@ import pylab as p  # Standard Libraries
 import numpy as np
 import os 
 import scipy 
+from scipy.ndimage.interpolation import rotate,affine_transform
 
 ##################################
 ###  Test to stop program
@@ -35,24 +36,20 @@ def stop_program():
     return False
 
 ##################################
-###  sigma clipping Function
-##################################
-def sig_clip(data, nsigma=5.):
-    datamean = np.mean(data, axis=None)
-    datasigma = np.std(data, axis=None)
-    return data[np.where(data < datamean+ nsigma * datasigma)]
-
-##################################
 ###  SECH Function
 ##################################
 def sech(z):
-    return 1. / np.cosh(z)
+    """Sech function using numpy.cosh
 
-##################################
-###  SECH2 Function
-##################################
-def sech2(z):
-    return (1. / np.cosh(z))**2.
+    Input
+    -----
+    z: float
+
+    Returns
+    -------
+    float - Sech(z)
+    """
+    return 1. / np.cosh(z)
 
 ##################################
 ### Run Example 
@@ -64,36 +61,246 @@ def run_example():
 ### Reading the Circular Velocity
 ### Data from file
 ##################################
-dic_comments = {"ROTCUR": "!", "ASCII": "#"}
+def read_vcirc_file(filename, Vcfile_type="ROTCUR", finestepR=1.0):
+    """Read a circular velocity ascii file. File can be of
+    type ROTCUR (comments are '!') or ASCII (comments are '#')
 
-def get_vcirc(filename, Vcfile_type="ROTCUR", stepR=1.0):
-    #--- Reading data
+    Input
+    -----
+    filename: str
+        name of the file.
+    Vcfile_type: str
+        'ROTCUR' or 'ASCII'.
+    finestepR: float
+        Step in radius to interpolate profile
+
+    Returns
+    -------
+    status: int
+        0 if all fine. -1 if opening error, -2 if file type not 
+        recognised
+    radius: float array
+        Radius sample
+    Vc: float array
+        Circular velocity as read for radius
+    eVc: float array 
+        Uncertainty on Circular velocity 
+    rfine: float array
+        Range of radii with finestepR
+    Vcfine: float array:
+        Interpolated circular velocity in rfine 
+    """
+
+    dic_comments = {"ROTCUR": "!", "ASCII": "#"}
+
+    # Setting up a few values to 0
     radius = Vc = eVc = rfine = Vcfine = 0.
+
+    # Testing the existence of the file
     if not os.path.isfile(filename) :
         print('OPENING ERROR: File {0} not found'.format(filename))
         status = -1
     else :
-        Vcdata = np.loadtxt(filename, 
-                comments=dic_comments[Vcfile_type]).T
-        if Vcfile_type == "ROTCUR":
-            selV = (Vcdata[7] == 0) & (Vcdata[6] == 0)
-            radius = Vcdata[0][selV]
-            Vc = Vcdata[4][selV]
-            eVc = Vcdata[5][selV]
-        elif Vcfile_type == "ASCII":
-            radius = Vcdata[0]
-            Vc = Vcdata[1][selV]
-            eVc = np.zeros_like(Vc)
-        else:
+        if Vcfile_type.upper() not in dic_comments.keys():
             print("ERROR: Vc file type not recognised")
             status = -2
+        else:
+            # Reading the file using the default comments
+            Vcdata = np.loadtxt(filename, 
+                        comments=dic_comments[Vcfile_type.upper()]).T
+            
+            # now depending on file type - ROTCUR
+            if Vcfile_type.upper() == "ROTCUR":
+                selV = (Vcdata[7] == 0) & (Vcdata[6] == 0)
+                radius = Vcdata[0][selV]
+                Vc = Vcdata[4][selV]
+                eVc = Vcdata[5][selV]
 
-        #--- Spline interpolation
-        rmax = np.max(radius, axis=None)
-        rfine = np.arange(0., rmax, stepR)
-        coeff_spline = scipy.interpolate.splrep(radius, Vc, k=1)
-        Vcfine = scipy.interpolate.splev(rfine, coeff_spline)
-        status = 0
+            # now - ASCII
+            elif Vcfile_type.upper() == "ASCII":
+                radius = Vcdata[0]
+                Vc = Vcdata[1][selV]
+                eVc = np.zeros_like(Vc)
+
+            #--- New radius range with fine step in R
+            rmax = np.max(radius, axis=None)
+            rfine = np.arange(0., rmax, finestepR)
+
+            # Spline interpolation for Vc
+            coeff_spline = scipy.interpolate.splrep(radius, Vc, k=1)
+            Vcfine = scipy.interpolate.splev(rfine, coeff_spline)
+            status = 0
         
     return status, radius, Vc, eVc, rfine, Vcfine
 
+##############################################################
+#----- Extracting the header and data array ------------------
+##############################################################
+def extract_frame(image_name, pixelsize=1., verbose=True):
+    """Extract 2D data array from fits
+    and return the data and the header
+
+    Parameters
+    ----------
+    image_name: str
+        Name of fits image
+    pixelsize:  float
+        Will read CDELT1 if it exists. Only used if CDELT does not
+        exist.
+    verbose:    bool
+        Default is True
+
+    Returns
+    -------
+    data:       float array
+        data array from the input image. None if image does not exists.
+    h:          header
+        Fits header from the input image. None if image does not exists.
+    steparc: float
+        Step in arcseconds
+    """
+    if (image_name is None) or (not os.path.isfile(image_name)):
+        print(('Filename {0} does not exist, sorry!'.format(image_name)))
+        return None, None, 1.0
+
+    else:
+        if verbose :
+            print(("Opening the Input image: {0}".format(image_name)))
+        #--------Reading of fits-file for grav. pot----------
+        data = pyfits.getdata(image_name)
+        h = pyfits.getheader(image_name)
+        #-------------- Fits Header IR Image------------
+        naxis1, naxis2 = h['NAXIS1'], h['NAXIS2']
+        data = np.nan_to_num(data.reshape((naxis2, naxis1)))
+
+        ##== Checking the step from the Input image (supposed to be in degrees)
+        ##== If it doesn't exist, we set the step to 1. (arcsec)
+        desc = 'CDELT1'
+        if desc in h:
+            steparc = np.fabs(h[desc] * 3600.) # calculation in arcsec
+            if verbose :
+                print('Read pixel size ({0}) of Main Image = {1}'.format(h[desc], steparc))
+        else :
+            steparc = pixelsize # in arcsec
+            if verbose :
+                print("Didn't find a CDELT descriptor, use step={0}".format(steparc))
+        return data, h, steparc
+#============================================================
+##############################################################
+#-----Rotation and Deprojecting routine----------------------
+##############################################################
+def deproject_frame(data, PA, inclination=90.0, plot=False):
+    """Returns a deprojected frame given a PA and inclination
+
+    Parameters
+    ----------
+    data: float array
+        Numpy array with input data (image)
+    PA: float
+        Position angle in degrees.
+    inclination: float
+        Inclination angle in degrees.
+    plot: bool
+        Default is False. If True, will create a matplotlib
+        (simple) figure.
+
+    Returns
+    -------
+    dep_data: float array
+        Deprojected image
+    """
+    
+    # Reading the shape of the disk array
+    Ysize, Xsize = data.shape
+
+    # Creating the new set of needed arrays
+    disk_dpj=np.zeros((Ysize+1,Xsize+1))
+    disk_rot=np.zeros_like(disk_dpj)
+    disk_rec=np.zeros_like(disk_dpj)
+    disk_dpj_c=np.zeros((Ysize, Xsize))
+    
+    # Recentering the disk
+    disk_rec[:Ysize,:Xsize] = data[:,:]
+    print("Image to deproject has shape: %f, %f" %(Ysize, Xsize))
+
+    # If plot, produce a matplotlib figure
+    if plot:
+        p.figure(1)
+        p.clf()
+        p.imshow(disk_rec)
+        p.title("Transfer of the rectified Image before deprojection")
+        p.draw()
+        if stop_program() : sys.exit(0)
+    
+    # Phi in radians
+    phi= np.deg2rad(inclination)
+    # Deprojection Matrix
+    dpj_matrix = np.array([[1.0 * np.cos(phi),   0.   ],
+                          [0.0, 1.0 ]])   
+ 
+    # Rotate Disk around theta
+    disk_rot =  rotate(np.asarray(disk_rec), PA - 90., reshape=False)
+ 
+    # Deproject Image
+    offy = Ysize / 2 - 1. - (Ysize / 2 - 1.) * np.cos(phi)
+    disk_dpj_c = affine_transform(disk_rot, dpj_matrix, 
+                                  offset=(offy,0))[:Ysize,:Xsize]
+ 
+    return disk_dpj_c
+
+#============================================================
+#-----------Create Radial Profile----------------------------
+#============================================================
+def extract_profile(rmap, data, nbins, verbose=True): 
+    """Extract a radial profile from input frame
+    Input
+    -----
+    rmap: float array
+        Values of the radius.
+    data: float array
+        Input data values.
+    nbins: int
+        Number of bins for the radial profile.
+    verbose: bool
+        Default is True (print information)
+
+    Returns
+    -------
+    rsamp: float array
+        Radial array (1D)
+    rdata: float array
+        Radial values (1D)
+    """
+    # Printing more in case of verbose
+    if verbose :
+        print("Deriving the radial profile ... \n")
+
+    ##== First deriving the max and cutting it in nbins
+    rsamp, stepr = get_rsamp(rmap, nbins)
+    rdata = np.zeros_like(rsamp)
+
+    ##== Filling in the values for y (only if there are some selected pixels)
+    for i in range(len(rsamp)-1):
+        sel = np.where((rmap >= rsamp[i]) & (rmap < rsamp[i+1]))  ##== selecting an annulus between two bins
+        if len(sel) > 0 :
+            rdata[i] = np.mean(data[sel], axis=None)
+
+    ##-- Returning the obtained profile
+    return rsamp, rdata
+
+def get_rsamp(rmap, nbins):
+    """Get radius values from a radius map
+    Useful for radial profiles
+    """
+    ##== First deriving the max and cutting it in nbins
+    maxr = np.max(rmap, axis=None)
+
+    ##== Adding 1/2 step
+    stepr = maxr / (nbins*2) 
+    rsamp = np.linspace(0., maxr+stepr, nbins)
+    if nbins > 1:
+        rstep = rsamp[1] - rsamp[0]
+    else:
+        rstep = 1.0
+    
+    return rsamp, rstep
