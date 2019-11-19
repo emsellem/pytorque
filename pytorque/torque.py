@@ -217,8 +217,8 @@ class discmodel(object)   :
             self.data_gas, h, self.stepgas_arc = extract_frame(gasimage_name, self.stepgas_arc, self.verbose)
             # Step in parsec - Gas
             self.steppc2 = self.stepgas_arc * self.pc_per_arcsec # Pixel size of gas image in pc
-            self.zoomfactor = self.stepgas_arc / self.steparc
-            self._found_gas = (self.datagas is not None)
+            self.zoomfactor = self.stepgas_arc / self.step_arc
+            self._found_gas = (self.data_gas is not None)
             if self.verbose:
                 print(("zoomfactor (pixel size ratio) = {0}".format(self.zoomfactor)))
 
@@ -848,8 +848,8 @@ class discmodel(object)   :
         F_grad = np.gradient(self.pot) 
 
         # Force components in X and Y
-        self.Fx = F_grad[1] / (self.steparc * self.pc_per_arcsec)
-        self.Fy = F_grad[0] / (self.steparc * self.pc_per_arcsec)
+        self.Fx = F_grad[1] / (self.step_arc * self.pc_per_arcsec)
+        self.Fy = F_grad[0] / (self.step_arc * self.pc_per_arcsec)
 
         #Radial force vector in outward direction
         self.Frad =   self.Fx * np.cos(self.theta) + self.Fy * np.sin(self.theta)
