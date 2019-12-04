@@ -6,8 +6,7 @@ of optical and near-infrared images.
 MPIA / CRAL: @ 2007
 
 Authors: Eric Emsellem for first python modules and new class adaptation.
-         With great contributions from Sebastian Haan who did develop
-         his own version.
+         With great contributions from Sebastian Haan
 """
 
 __version__ = '1.0.0 (05-11, 2019)'
@@ -60,11 +59,11 @@ class discmodel(object)   :
     ----------
     folder : str
         file folder where the input images are
-    massimage : str
+    mass_filename : str
         Name of Mass image (fits)
-    gasimage :  str
+    gas_filename :  str
         Name of gas distribution image (fits)
-    vcfile : str
+    vc_filename : str
         rotation file
     distance : float
         Distance of galaxy in Mpc [1.]
@@ -89,13 +88,13 @@ class discmodel(object)   :
     verbose : bool
         Verbose option [False]
     """
-    def __init__(self, folder="", massimage=None, gasimage=None, 
-                 vcfile=None, vcfile_type="ROTCUR",
+    def __init__(self, folder="", mass_filename=None, gas_filename=None, 
+                 vc_filename=None, vc_filetype="ROTCUR",
                  verbose=False, distance=1., PA=0., inclination=0., 
                  cen=(512,512), cengas=(512,512), 
                  box=(300,300), boxgas=(300,300), 
                  step_arc=1., stepgas_arc=1., azoom=1, 
-                 plot=True, nbins=100):
+                 plot=True, n_rbins=100):
         """Initialisation of the disc model class
         Mainly setting up a few parameters like the distance, PA and inclination
         and reading the data from the given input images
@@ -104,11 +103,11 @@ class discmodel(object)   :
         ----------
         folder : str
             file folder where the input images are
-        massimage : str
+        mass_filename : str
             Name of Mass image (fits)
-        gasimage :  str
+        gas_filename :  str
             Name of gas distribution image (fits)
-        vcfile : str
+        vc_filename : str
             rotation file
         distance : float
             Distance of galaxy in Mpc [1.]
@@ -131,52 +130,56 @@ class discmodel(object)   :
             Size of pixel in arcseconds for gas image
         azoom: int [6]
             Zooming factor. Should be larger or equal to 1.
+        n_rbins: int [100]
+            Number of radial bins for profiles
         plot: bool
             Whether to plot or not [True]
         verbose : bool
             Verbose option [False]
         """
 
-        ##=== Checking if the directory and file name exist.
-        ##=== For this we use the os python module
+        ##--- Verbose and plot option - self explanatory
         self.verbose = verbose
         self.plot = plot
 
         ##=== Some useful number
-        self.distance = distance # Galaxy distance in Mpc
+        self.distance = distance                            # Galaxy distance in Mpc
         self.pc_per_arcsec = self.distance * np.pi / 0.648  # Conversion arcsec => pc (pc per arcsec)
-        self.PA = PA                                        # Position angle in degrees
+        self.PA = PA                                        # Position angle in degrees (from North)
         self.inclination = inclination                      # Inclination in degrees
 
-        ##== Checking the existence of the two images ===========================================
+        ##== Checking the existence of the folder 
         if not os.path.exists(folder):
-            print(('ERROR: Path %s' %(folder), ' does not exists, sorry!'))
+            print('ERROR: Input Path {0} does not exists, sorry!'.format(
+                    folder))
             return
         self.folder = folder 
 
         #--------------- Input frame characteristics --------------------
-        self.cen = cen                                        # Position for the centre
-        self.box = box 
-        self.cengas = cengas                                        # Position for the centre of gas image
-        self.boxgas = boxgas                                        # Box coordinates
-        self.nbins = nbins
+        self.cen = cen                  # Position for the centre
+        self.box = box                  # size of the box (total) in pixels  
+        self.cengas = cengas            # Position (pixels) for the centre of gas image
+        self.boxgas = boxgas            # Size of gas box (pixels)
         self.step_arc = step_arc
         self.stepgas_arc = stepgas_arc
 
-        # Mass image name
-        self.massimage = massimage
+        #--- Number of radial bins for profiles
+        self.n_rbins = n_rbins              
+
+        # Mass image name -if any
+        self.mass_filename = mass_filename
         # Gas image name
-        self.gasimage = gasimage
+        self.gas_filename = gas_filename
         # Vcfile name and type
-        self.vcfile = vcfile
-        self.vcfile_type = vcfile_type
+        self.vc_filename = vc_filename
+        self.vc_filetype = vc_filetype
 
         self._found_mass = self._found_gas = self._found_vc = False
-        if massimage is None :
+        if mass_filename is None :
             print('WARNING: no filename for the main Input Image provided')
-        if gasimage is None :
+        if gas_filename is None :
             print('WARNING: no filename for the gas Input Image provided')
-        if vcfile is None :
+        if vc_filename is None :
             print('WARNING: no filename for the Rotation Input File provided')
 
         ##== Checking if the zoom is larger than 1 before proceeding
@@ -202,8 +205,8 @@ class discmodel(object)   :
             print("Trying to open Input files now...")
 
         # Full Mass/Gas/Vc image name
-        if self.massimage is not None:
-            inimage_name = joinpath(self.folder, self.massimage)
+        if self.mass_filename is not None:
+            inimage_name = joinpath(self.folder, self.mass_filename)
             
             # Extracting the data from Mass Image
             self.data, h, self.step_arc = extract_frame(inimage_name, self.step_arc, self.verbose)
@@ -212,9 +215,10 @@ class discmodel(object)   :
             self._found_mass = (self.data is not None)
 
         # Extracting the data from Gas Image
-        if self.gasimage is not None:
-            gasimage_name = joinpath(self.folder, self.gasimage)
-            self.data_gas, h, self.stepgas_arc = extract_frame(gasimage_name, self.stepgas_arc, self.verbose)
+        if self.gas_filename is not None:
+            full_gas_filename = joinpath(self.folder, self.gas_filename)
+            self.data_gas, h, self.stepgas_arc = extract_frame(full_gas_filename, 
+                                    self.stepgas_arc, self.verbose)
             # Step in parsec - Gas
             self.steppc2 = self.stepgas_arc * self.pc_per_arcsec # Pixel size of gas image in pc
             self.zoomfactor = self.stepgas_arc / self.step_arc
@@ -239,7 +243,7 @@ class discmodel(object)   :
         """
         self.sub_background()
         self.deproject_disc()
-        self.radial_excl(self.rpc, self.discS, self.nbins)
+        self.radial_excl(self.rpc, self.discS, self.n_rbins)
 
         # Bulge fitting
         self.bulge_fit(self.discS)
@@ -252,7 +256,7 @@ class discmodel(object)   :
         self.bulge_add(self.discS_nobulge)
 
         ## Radial Profile
-        self.rdiscpc, self.prof_disc = extract_profile(self.rpc, self.discF,  self.nbins)
+        self.rdiscpc, self.prof_disc = extract_profile(self.rpc, self.discF,  self.n_rbins)
 
         ## Deriving the kernel
         self.calc_kernel(softening=softening)
@@ -264,7 +268,7 @@ class discmodel(object)   :
         self.VcU = self.calc_vrot_field()
 
         ## Create rotation velocity profile, unscaled here
-        self.rsampVc, self.sampVcU = extract_profile(self.rpc, self.VcU, nbins=self.nbins)
+        self.rsampVc, self.sampVcU = extract_profile(self.rpc, self.VcU, n_rbins=self.n_rbins)
         ## Calculation of radial dependent M to L ratio by comparison with observed velocity
         ## mode 1: radial dependent, else constant scaling value
         self.scale_Vc(self.VcU, mode=0)
@@ -278,10 +282,10 @@ class discmodel(object)   :
         self.VcC = np.sqrt(self.ML) * self.VcU
 
         #Decomposition of potential
-        self.decompose(self.potC, nbins=45, fc_order=8)
+        self.decompose(self.potC, n_rbins=45, fc_order=8)
 
         ##Calculation of torques
-        self.calc_torque(self.rpc, self.VcC, self.FxC, self.FyC, self.nbins)
+        self.calc_torque(self.rpc, self.VcC, self.FxC, self.FyC, self.n_rbins)
         
         ## plotting the result
         if self.plot:
@@ -479,7 +483,7 @@ class discmodel(object)   :
     #============================================================
     #-----------Create Radial Profile excluding a theta region --
     #============================================================
-    def radial_excl(self, r, data, nbins, wedge_size=30.0):   
+    def radial_excl(self, r, data, n_rbins, wedge_size=30.0):   
         """Create radial profile after excluding a wedge defined
         by an angle
 
@@ -489,7 +493,7 @@ class discmodel(object)   :
             Input radius array
         data: float array
             Input data array
-        nbins: int
+        n_rbins: int
             Number of bins for the radial profile
         wedge_size: float
             Wedge size in degrees. Will exclude wedge with size
@@ -506,7 +510,7 @@ class discmodel(object)   :
             print("Deriving the radial profile for bulge... \n")
 
         ##== Adding 1/2 step
-        rsamp, step = get_rsamp(r, nbins)
+        rsamp, step = get_rsamp(r, n_rbins)
         rdata = np.zeros_like(rsamp)
 
         ##== Wedge in radians
@@ -607,9 +611,9 @@ class discmodel(object)   :
             print("Deprojecting the disc without bulge... \n")
         self.discS_nobulge = deproject_frame(self.disc_nobulge, self.PA, self.inclination)
           
-    #============================================================
-    #----------------Calculation of the Kernel Function----------
-    #============================================================
+#============================================================
+#----------------Calculation of the Kernel Function----------
+#============================================================
     def calc_kernel(self, softening=0., function="sech2"):                       
         """Calculate the kernel for the potential
         
@@ -675,15 +679,15 @@ class discmodel(object)   :
 
         return np.sqrt(np.fabs(self.rpc * self.Frad))
 
-    def read_Vc(self, vcfile=None, vcfile_type="ROTCUR"):
+    def read_Vc(self, vc_filename=None, vc_filetype="ROTCUR"):
         """Reading the input Vc file
 
         Input
         -----
-        vcfile: str
+        vc_filename: str
             Name of the Vcfile
 
-        vcfile_type: str
+        vc_filetype: str
             'ROTCUR' or 'ASCII'
 
         Returns
@@ -692,20 +696,20 @@ class discmodel(object)   :
             0 means it was read. -1: the file does not exist
             -2: file type not recognised.
         """
-        if vcfile is None:
-            if self.vcfile is None:
+        if vc_filename is None:
+            if self.vc_filename is None:
                 print("ERROR: no Vc filename provided")
                 return -1
 
-            vcfile = self.vcfile
+            vc_filename = self.vc_filename
         if self.verbose :
             print("Reading the Vc file")
 
         ##--- Reading of observed rot velocities
-        vc_filename = joinpath(self.folder + vcfile)
+        vc_filename = joinpath(self.folder + vc_filename)
         status, self.Vcobs_r, self.Vcobs, self.eVcobs, \
                 self.Vcobs_rint, self.Vcobs_int = read_vcirc_file(vc_filename, 
-                        vcfile_type=vcfile_type)
+                        vc_filetype=vc_filetype)
 
         if status == 0 * self.verbose:
             print("Vc file successfully read")
@@ -803,7 +807,7 @@ class discmodel(object)   :
     #==============================================================
     #---------------Potential decomposition------------------------
     #==============================================================
-    def decompose(self, pot, nbins, fc_order=8):
+    def decompose(self, pot, n_rbins, fc_order=8):
           
         if self.verbose :
             print("Decomposition of the potential in Fourier coefficients... \n")         
@@ -811,11 +815,11 @@ class discmodel(object)   :
         theta = self.theta
 
         ## Getting the radial sampling
-        x, stepr = get_rsamp(r, nbins)
+        x, stepr = get_rsamp(r, n_rbins)
         y = np.zeros_like(x)
 
         ##Definition of Fouriercoefficients:
-        fc_cos = np.zeros((nbins, fc_order))
+        fc_cos = np.zeros((n_rbins, fc_order))
         fc_sin = np.zeros_like(fc_cos)
         fc_cos_n = np.zeros_like(fc_cos)
         fc_sin_n = np.zeros_like(fc_cos)
@@ -859,7 +863,7 @@ class discmodel(object)   :
     #============================================================
     #----Calculation of the gravity torques and mass flow rates--
     #============================================================
-    def calc_torque(self, r, v, Fx_grad, Fy_grad, nbins):
+    def calc_torque(self, r, v, Fx_grad, Fy_grad, n_rbins):
         """Calculation of the gravity torques
         """
         if self.verbose :
@@ -869,7 +873,7 @@ class discmodel(object)   :
         self.torque = (self.xpc * Fy_grad - self.ypc * Fx_grad) * self.gasdisc_dep
 
         ## Average over azimuthal angle and normalization
-        rsamp, stepr = get_rsamp(r, nbins)
+        rsamp, stepr = get_rsamp(r, n_rbins)
 
         t = np.zeros_like(rsamp)
         l = np.zeros_like(rsamp)
